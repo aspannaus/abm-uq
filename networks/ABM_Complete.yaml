@@ -1,0 +1,9 @@
+network_file: networks/network_complete.txt
+initial_infect_count: 10
+initial_recover_count: 0
+stop.at: 7
+trans_probability: 0.00012503125
+recov_probability: 0.1
+noNodes: 4000
+avgDeg: 3999
+counts_file: output/ABM_BTER/Net_complete/ABM_counts.csv

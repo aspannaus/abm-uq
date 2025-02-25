@@ -1,0 +1,16 @@
+save_name: "smc_static"
+SMC_args:
+  T_max: 49
+  tau: 0.5
+  abm_file: "data/abm_data/counts_1.csv"
+  seed: 4211
+  n_particles: 16 
+
+epi_args:
+  N: 4000
+  I0: 10
+  beta: 0.5
+  gamma: 0.1
+  sigma2_x: 0.05
+  sigma2_y: 0.1
+
