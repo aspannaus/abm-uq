@@ -7,7 +7,7 @@ import os
 
 # setup interface with the scan c-lib
 _float_ptr = npct.ndpointer(dtype=np.float32, ndim=1, flags='C_CONTIGUOUS')
-_scan = npct.load_library('libscan.so', os.path.dirname(__file__))
+_scan = npct.load_library('libthrustscan.so', os.path.dirname(__file__))
 # Define the return type of the C function
 _scan.scan.restype = ct.c_float
 # Define arguments of the C function
@@ -19,9 +19,9 @@ N = 50
 wts = np.linspace(0, 1, num=N, dtype=np.float32)
 out = np.zeros(N, dtype=np.float32)
 
-time = _scan.scan(out, wts, ct.c_int(N), ct.c_bool(True))
+time = _scan.scan(out, wts, ct.c_int(N), ct.c_bool(False))
 print(f"Wall time: {time:f}\n")
-print(out)
 print("\nOff by one index, parallel is inclusive, numpy is an exclusive sum")
 print("inclusive sum is needed for systematic resampling\n")
-print(np.cumsum(wts))
+np_out = np.cumsum(wts)
+print(np.allclose(out, np_out))

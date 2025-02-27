@@ -14,7 +14,7 @@ import numpy.ctypeslib as npct
 if os.uname()[0] == "Linux":
     # setup interface with the scan c-lib
     _float_ptr = npct.ndpointer(dtype=np.float32, ndim=1, flags="C_CONTIGUOUS")
-    _scan = npct.load_library("parallel-scan/libscan.so", os.path.dirname(__file__))
+    _scan = npct.load_library("parallel-scan/libthrustscan.so", os.path.dirname(__file__))
     # Define the return type of the C function
     _scan.scan.restype = ct.c_float
     # Define arguments of the C function
@@ -340,8 +340,8 @@ class Resampler:
         M = self.N
         # NOTE: do we need to check if W is normalized to 1?
         # print(W.sum())
-        su = (0.0796543 + jnp.arange(M)) / M
-        # su = (jr.uniform(key) + jnp.arange(M)) / M
+        # su = (0.0796543 + jnp.arange(M)) / M
+        su = (jr.uniform(key) + jnp.arange(M)) / M
         A = self.inverse_cdf(su, W)
         return A
 
