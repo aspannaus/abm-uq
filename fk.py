@@ -2,21 +2,18 @@ import math
 import os
 import time
 
-import jax
-
 import jax.numpy as jnp
 import jax.random as jr
 import jax.scipy.stats as jstats
 
-# from sklearn.gaussian_process import GaussianProcessRegressor
-# from sklearn.gaussian_process.kernels import RBF
-# from functools import partial
 import gp
 import kernels
 
 import resampling
 
-import collectors, smoothing, utils
+import collectors
+import smoothing
+import utils
 
 
 class FeynmanKac:
@@ -82,11 +79,6 @@ class FeynmanKac:
     def logpt(self, t, xp, x):
         """Log-density of X_t given X_{t-1}."""
         raise NotImplementedError(err_msg_missing_trans % self.__class__.__name__)
-
-    @property
-    def isAPF(self):
-        """Returns true if model is an APF"""
-        return "logeta" in dir(self)
 
     def default_moments(self, W, X):
         """Default moments (see module ``collectors``).
@@ -248,19 +240,10 @@ class SMC:
 
     def time_to_resample(self):
         """When to resample."""
-        # ess = self.wgts.get_ESS()
-        # print("ESS", ess)
         return self.wgts.get_ESS() < self.N * self.ESSrmin
-        # return self.wgts.ESS < self.N * self.ESSrmin
-
-    def setup_auxiliary_weights(self):
-        """Compute auxiliary weights (for APF)."""
-        # probably not needed
-        self.aux = self.wgts
 
     def generate_particles(self, key):
         self.X = self.fk.M0(self.N, key)
-        # self.X = self.X.at[:, :3].set(jax.vmap(utils.simplex_proj, in_axes=(0, None))(self.X[:, :3], self.N))
 
     def reweight_particles(self, key, ctr=0):
         if ctr % self.Y_STEP == 0:
@@ -268,29 +251,25 @@ class SMC:
             wts = self.fk.logG(self.t, self.fk.data[y_idx], self.X, key)
         else:
             time_var = (ctr % self.Y_STEP) * self.tau
+            # next observation
             y_idx = int((ctr + self.Y_STEP) / self.Y_STEP)
             wts = jstats.norm.logpdf(
                 x=self.fk.data[y_idx, 1],
-                loc=self.X[:,1],
+                loc=self.X[:, 1],
                 scale=(self.fk.ssm.sigma2_x * time_var),
             )
         self.wgts.add(wts)
 
-    # @jax.jit
     def resample(self, key):
         self.rs_flag = self.time_to_resample()
         if self.rs_flag:  # if resampling
             self.A = self.resampling(self.wgts.W, key)
-            # we always resample self.N particles, even if smc.X has a
-            # different size (example: waste-free)
             self.X_hat = self.X[self.A]
             self.reset_weights()
         else:
             self.A = jnp.arange(self.N)
             self.X_hat = self.X
 
-    # @jax.jit
-    # @partial(jax.jit, static_argnames=['self', 'ctr'])
     def mutate(self, key, ctr=0):
         mvn_key, m_key = jr.split(key, 2)
         ys = self.fk.M(self.t, self.hist.X[-1], m_key, add_noise=False)
@@ -306,36 +285,15 @@ class SMC:
             ),
             length_scale_bounds=(1e-4, 1.0),
         )
-        gauss_process = gp.GaussianProcessRegressor(
-            kernel=kernel, alpha=1e-2
-        )
+        gauss_process = gp.GaussianProcessRegressor(kernel=kernel, alpha=1e-2)
+
         gauss_process.fit(self.hist.X[-1], ys)
-        mu = gauss_process.predict(self.X_hat, return_cov=False)
-        # _cov = jnp.diag(jnp.mean(cov, axis=0).mean(axis=0)) + jnp.diag(
-        #     jnp.array(
-        #         [
-        #             self.fk.ssm.sigma2_x,
-        #             self.fk.ssm.sigma2_x,
-        #             self.fk.ssm.sigma2_x,
-        #             1.0,
-        #             1.0,
-        #         ]
-        #     )
-        # )
-        self.X = jnp.array(mu)
-        # if ctr % self.Y_STEP == 0:
-        #     y_idx = int(ctr / self.Y_STEP)
-        #     # print(ctr, y_idx, self.fk.data[y_idx])
-        #     obs = self.fk.data[y_idx, 1] + self.fk.ssm.sigma2_y * jr.normal(
-        #         key, shape=(self.X.shape[0],)
-        #     )
-        #     self.X = self.X.at[:, 1].set(obs)
+        self.X = jnp.array(gauss_process.predict(self.X_hat, return_cov=False))
+
         tmp = jnp.where(self.X[:, :3] < 1, self.X[:, :3], 1.0 / self.X[:, :3])
         self.X = self.X.at[:, :3].set(tmp)
         tmp = jnp.where(self.X[:, :3] > 0, self.X[:, :3], jnp.abs(self.X[:, :3]) / 10)
         self.X = self.X.at[:, :3].set(tmp)
-        # self.X = self.X.at[:,2].set(1-self.X[:,0] - self.X[:,1])
-        # print("X[i]", self.X)
 
     def compute_summaries(self, ctr=0):
         if ctr % self.Y_STEP == 0:
@@ -353,15 +311,16 @@ class SMC:
         if self.hist:
             self.hist.save(self)
         # must collect summaries *after* history, because a collector (e.g.
-        # FixedLagSmoother) may needs to access history
+        # FixedLagSmoother) may need to access history
         if self.summaries:
             self.summaries.collect(self)
 
-    def run(self, key):
+    def run(self, key, abm=False):
         """Runs particle filter until completion."""
         # initalize eveything at iter = 0
         new_key, obs_key, key = jr.split(key, 3)
-        self.generate_particles(new_key)
+        if not abm:  # running regular smc
+            self.generate_particles(new_key)
         self.reweight_particles(obs_key)
         self.compute_summaries()
 
@@ -374,34 +333,4 @@ class SMC:
             self.compute_summaries(ctr)
             key = new_key
             end = time.time()
-            # print(
-            #     f"Step: {ctr:4d}, Computation time: {end - start:.6f}"
-            # )
-        # self.fk.ssm.update_beta_gamma(self.X)
-        # print(self.fk.ssm.theta_beta, self.fk.ssm.theta_gamma)
-
-    def __iter__(self):
-        return self
-
-    # @utils.timer
-    # def run(self):
-    #     """Runs particle filter until completion.
-
-    #     Note: this class implements the iterator protocol. This makes it
-    #     possible to run the algorithm step by step::
-
-    #         pf = SMC(fk=...)
-    #         next(pf)  # performs one step
-    #         next(pf)  # performs one step
-    #         for _ in range(10):
-    #             next(pf)  # performs 10 steps
-    #         pf.run()  # runs the remaining steps
-
-    #     In that case, attribute `cpu_time` records the CPU cost of the last
-    #     command only.
-    #     """
-    #     for _ in self:
-    #         pass
-
-
-####################################################
+            print(f"Step: {ctr:4d}, Computation time: {end - start:.6f}")

@@ -1,4 +1,5 @@
 """Jax partial implementation of Sk-learn's GP kernels. """
+
 from abc import ABCMeta, abstractmethod
 import math
 from collections import namedtuple
@@ -10,8 +11,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from jax.scipy.special import gamma
-
-
 
 
 def _check_length_scale(X, length_scale):
@@ -48,7 +47,7 @@ def pdist(X, sqrt=False):
 
 @jax.jit
 def cdist(x, y, sqrt=False):
-    dists = jnp.sum((x[:, None] - y[None, :]) ** 2, -1) 
+    dists = jnp.sum((x[:, None] - y[None, :]) ** 2, -1)
     if sqrt:
         return jnp.sqrt(dists)
     return dists
@@ -417,6 +416,7 @@ class NormalizedKernelMixin:
         """
         return jnp.ones(X.shape[0])
 
+
 class KernelOperator(Kernel):
     """Base class for all kernel operators.
 
@@ -535,7 +535,6 @@ class KernelOperator(Kernel):
         return self.k1.requires_vector_input or self.k2.requires_vector_input
 
 
-
 class Hyperparameter(
     namedtuple(
         "Hyperparameter", ("name", "value_type", "bounds", "n_elements", "fixed")
@@ -635,6 +634,7 @@ class Hyperparameter(
             and self.n_elements == other.n_elements
             and self.fixed == other.fixed
         )
+
 
 class ConstantKernel(StationaryKernelMixin, GenericKernelMixin, Kernel):
     """Constant kernel.
@@ -761,7 +761,6 @@ class ConstantKernel(StationaryKernelMixin, GenericKernelMixin, Kernel):
         return "{0:.3g}**2".format(jnp.sqrt(self.constant_value))
 
 
-
 class Product(KernelOperator):
     """The `Product` kernel takes two kernels :math:`k_1` and :math:`k_2`
     and combines them via
@@ -860,9 +859,6 @@ class Product(KernelOperator):
 
     def __repr__(self):
         return "{0} * {1}".format(self.k1.constant_value, self.k2)
-
-
-
 
 
 class Kernel(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
@@ -1144,8 +1140,6 @@ class RBF(Kernel):
             )
         return Hyperparameter("length_scale", "numeric", self.length_scale_bounds)
 
-
-
     def __call__(self, X, Y=None, eval_gradient=False):
         """Return the kernel k(X, Y) and optionally its gradient.
 
@@ -1174,7 +1168,6 @@ class RBF(Kernel):
         else:
             dists = cdist(X / length_scale, Y / length_scale)
             K = jnp.exp(-0.5 * dists)
-
 
         if eval_gradient:
             if self.hyperparameter_length_scale.fixed:

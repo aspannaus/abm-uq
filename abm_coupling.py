@@ -1,7 +1,5 @@
-"""ABM and UQ module
-Sifat Afroj Moon
-BTER network
-Initialized transmissibility and recoverray rate randomly, later it takes the values from UQ
+"""Coupled ABM and UQ module
+
 """
 
 import copy
@@ -9,31 +7,25 @@ import datetime
 import math
 import os
 from dataclasses import dataclass
-# import warnings
 import yaml
 
-# sys.path.append("./abm-uq-jax")
 from mpi4py import MPI
 import numpy as np
 
 from repast4py.network import write_network, read_network
 
-from repast4py import core, random, schedule, logging  #, parameters
+from repast4py import core, random, schedule, logging
 from repast4py import context as ctx
 
 import jax
 import jax.random as jr
 import jax.numpy as jnp
 
-# import mpi4jax  # noqa: E402
-
 import collectors
 import fk
 import ssm
 import utils
 
-
-# warnings.filterwarnings("ignore")
 
 
 class ParamError(Exception):
@@ -152,7 +144,6 @@ class Model:
         self.runner.schedule_stop(params["stop.at"])
         self.runner.schedule_end_event(self.at_end)
         self.rank = comm.Get_rank()
-        # print(comm.Get_rank(), params['trans_probability'], params['recov_probability'])
         if context is None:
             self.context = ctx.SharedContext(comm)
             fpath = params["network_file"]
@@ -204,9 +195,6 @@ class Model:
 
         self.trans_probability = params["trans_probability"]
         self.recov_probability = params["recov_probability"]
-        if comm.Get_rank() == 0:
-            print("beta", self.trans_probability)
-            print("gamma", self.recov_probability)
 
     def _seed_infect(self, init_count: int, comm):
         world_size = comm.Get_size()
@@ -220,7 +208,6 @@ class Model:
 
         infect_count = np.empty(1, dtype=np.int32)
         comm.Scatter(infect_counts, infect_count, root=0)
-        # print('seed')
 
         for agent in self.context.agents(count=infect_count[0], shuffle=True):
             agent.received_infect = True
@@ -244,8 +231,6 @@ class Model:
         for agent in np.random.choice(
             self.susceptible, recover_count[0], replace=False
         ):
-            # agent.received_infect = True
-            # print(agent)
             if agent in self.infect:
                 self.infect.remove(agent)
 
@@ -260,25 +245,17 @@ class Model:
         rng = random.default_rng
         t = self.runner.schedule.tick / 1
         for agent in self.infect:
-            # print(agent.uid[0])
             for ngh in self.net.graph.neighbors(agent):
-                # print(agent)
-                # only update agents local to this rank
-                # emp_weight=G.edges[agent.uid[0], ngh.uid[0]]['weight_time'+str(np.ceil(t).astype(int))]
-
                 if (
                     not ngh.received_infect
                     and ngh.local_rank == self.rank
                     and rng.uniform() <= self.trans_probability
                 ):
-                    # if not ngh.received_infect  and ngh.local_rank == self.rank and rng.uniform() <= self.trans_probability:
                     ngh.received_infect = True
                     new_infect.append(ngh)
             if rng.uniform() <= self.recov_probability:
                 self.recover.append(agent)
-                # print(len(self.infect))
                 self.infect.remove(agent)
-                # print(len(self.infect))
 
                 new_recov.append(agent)
 
@@ -290,13 +267,7 @@ class Model:
 
         self.counts_history.total_infect_history.append(self.counts.total_infect)
         self.counts_history.total_recover_history.append(self.counts.total_recov)
-        # print(
-        #     self.counts_history.total_infect_history,
-        #     self.counts_history.total_recover_history,
-        # )
 
-        # print("ABM total infect: ", self.counts.total_infect)
-        # self.data_set.log(self.runner.schedule.tick)
         if self.runner.schedule.tick % 1 == 0:
             self.data_set.log(self.runner.schedule.tick)
 
@@ -320,7 +291,6 @@ def update_abm_params(abm_params, ssm_params, counts, num_nodes, avg_deg):
     abm_params["initial_recover_count"] = int(counts[2, -1] * num_nodes)
     abm_params["trans_probability"] = jnp.exp(ssm_params[0]) / avg_deg  # for node degree
     abm_params["recov_probability"] = jnp.exp(ssm_params[1])
-    # print('update ', abm_params["trans_probability"], abm_params["recov_probability"])
     return abm_params
 
 
@@ -330,10 +300,7 @@ def main(cli_args):
     mpi_rank = mpi_comm.Get_rank()
     mpi_size = mpi_comm.Get_size()
 
-    # comm_jax = mpi_comm.Clone()
-
     # on GPU, put each process on its own device
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(1)
     if mpi_rank != 0:
         jax.default_device(jax.devices("cpu")[0])
 
@@ -360,19 +327,17 @@ def main(cli_args):
         tau = smc_args["SMC_args"]["tau"]
         seed = smc_args["SMC_args"]["seed"]
         N = smc_args["epi_args"]["N"]
-        # I0 = smc_args["epi_args"]["I0"]
-        # beta = smc_args["epi_args"]["beta"]
-        # gamma = smc_args["epi_args"]["gamma"]
 
         key = jr.key(smc_args["SMC_args"]["seed"])
 
-        outout_dict = {"beta": [], "gamma": [], "S": [], "I": [], "R": []}
+        output_dict = {"beta": [], "gamma": [], "S": [], "I": [], "R": []}
 
         key = jr.key(seed)
         model_key, fk_key, alg_key, key = jr.split(key, 4)
-        # covidData = pd.read_csv('Covid_data_knox_county.csv')
-        ###  flip infected with new_infection. Flip column 1 with maybe 3
 
+        rands = jr.uniform(key, minval=-20, maxval=-1, shape=2)
+        beta0 = jnp.exp(rands[0])
+        gamma0 = jnp.exp(rands[1])
         # both start from same ICs
         sir = ssm.SIRSDE(
             N=float(N / N),
@@ -382,30 +347,31 @@ def main(cli_args):
             tau=tau,
             key=model_key,
             abm_file=None,
+            beta0=jnp.log(beta0),
+            gamma0=jnp.log(gamma0) 
         )
 
-        rands = jr.uniform(key, minval=-20, maxval=-1, shape=2)
         abm_params["trans_probability"] = (
-            jnp.exp(rands[0]) / abm_params["avgDeg"]
+            beta0 / abm_params["avgDeg"]
         )  # for node degree
-        abm_params["recov_probability"] = jnp.exp(rands[1])
-        outout_dict["beta"].append(abm_params["trans_probability"])
-        outout_dict["gamma"].append(abm_params["recov_probability"])
+        abm_params["recov_probability"] = gamma0
+        output_dict["beta"].append(beta0)
+        output_dict["gamma"].append(gamma0)
         mpi_comm.send(abm_params, dest=1, tag=11)
 
     # in global space
     if mpi_rank == 1:
         abm_params = mpi_comm.recv(source=0, tag=11)
-    # abm_params = mpi_comm.bcast(abm_params, root=0)
     n_weeks = 7
     model = Model(MPI.COMM_WORLD, abm_params)
     run(model)
 
     if mpi_rank == 0:
         ys = model.y.copy()
-        outout_dict["S"].append(model.y[0])
-        outout_dict["I"].append(model.y[1])
-        outout_dict["R"].append(model.y[2])
+        print("I", model.y[1])
+        output_dict["S"].append(model.y[0])
+        output_dict["I"].append(model.y[1])
+        output_dict["R"].append(model.y[2])
 
         fk_model = ssm.Bootstrap(ssm=sir, data=ys.T)
 
@@ -416,29 +382,28 @@ def main(cli_args):
             N=smc_args["SMC_args"]["n_particles"],
             store_history=True,
             resampler="parallel",
-            collect=[collectors.Moments()],
+            collect=[collectors.Moments(), collectors.ESSs()],
             Y_STEP=math.ceil(1.0 / tau),
             key=fk_key,
             verbose=False,
         )
         alg.run(key=alg_key)
-        # this is unweighted
-        # ssm_params = jnp.percentile(alg.X, q=0.5, axis=0)
+        
         ssm_params = jnp.zeros(2)
         ssm_params = ssm_params.at[0].set(
-            utils.weighted_percentile(alg.X[:, 3], alg.wgts.lw, 0.5)
+            utils.weighted_percentile(alg.X[:, 3], alg.wgts.W, 0.5)
         )
         ssm_params = ssm_params.at[1].set(
-            utils.weighted_percentile(alg.X[:, 4], alg.wgts.lw, 0.5)
+            utils.weighted_percentile(alg.X[:, 4], alg.wgts.W, 0.5)
         )
         abm_params = update_abm_params(
             abm_params, ssm_params, model.y, abm_params["noNodes"], abm_params["avgDeg"]
         )
-        outout_dict["beta"].append(abm_params["trans_probability"])
-        outout_dict["gamma"].append(abm_params["recov_probability"])
+        output_dict["beta"].append(ssm_params[0])
+        output_dict["gamma"].append(ssm_params[1])
+        moments = alg.summaries.moments
 
     # the repast bits need to be in the global space
-    # mpi_comm.Barrier()
     abm_params = mpi_comm.bcast(abm_params, root=0)
     old_s = copy.copy(model.susceptible)
     old_i = copy.copy(model.infect)
@@ -459,24 +424,23 @@ def main(cli_args):
 
         if mpi_rank == 0:
             print("week", week)
-            outout_dict["S"].append(model.y[0])
-            outout_dict["I"].append(model.y[1])
-            outout_dict["R"].append(model.y[2])
-            new_key, key, model_key, fk_key = jr.split(key, 4)
-            # set smc obs from abm
-            # mpi4jax.send(model.y, dest=0, comm=comm_jax)
-            # ys = jax.zeros((3, 7))
-            # ys, _ = mpi4jax.recv(model.y, comm=comm_jax)
-            ys = model.y.T.copy()
-            # print("y", ys)
-            fk_model.data = ys
+            output_dict["S"].append(model.y[0])
+            output_dict["I"].append(model.y[1])
+            output_dict["R"].append(model.y[2])
+            new_key, key, y0_key = jr.split(key, 3)
+
+            fk_model.data = model.y.T.copy()
+            # passing conditions from the abm to initialize the next smc round
             # set smc initial conds from abm
-            sir.Y0 = jnp.asarray(alg.summaries.moments[-1]["mean"][:])
-            sir.Y0 = sir.Y0.at[1].set(model.y[1, 0])
+            sir.Y0 = alg.hist.X[-1]
+            tmp_i = model.y[1, 0] + (sir.sigma2_y * jr.normal(y0_key, shape=(alg.N)))
+            tmp_i = tmp_i.at[:].set(jnp.where(tmp_i > 0, tmp_i, jnp.abs(tmp_i)))
+            tmp_i = tmp_i.at[:].set(jnp.where(tmp_i < 1.0, tmp_i, 1.0 / tmp_i))
+            sir.Y0 = sir.Y0.at[:, 1].set(tmp_i)
+            alg.X = sir.Y0.copy()
             # run smc
-            alg.run(key=key)
+            alg.run(key=key, abm=True)
             # get distribution est from smc
-            # ssm_params = jnp.percentile(alg.X, q=0.5, axis=0)
             ssm_params = jnp.zeros(2)
             ssm_params = ssm_params.at[0].set(
                 utils.weighted_percentile(alg.X[:, 3], alg.wgts.lw, 0.5)
@@ -487,20 +451,19 @@ def main(cli_args):
             abm_params = update_abm_params(
                 abm_params, ssm_params, model.y, abm_params["noNodes"], abm_params["avgDeg"]
             )
-            outout_dict["beta"].append(abm_params["trans_probability"])
-            outout_dict["gamma"].append(abm_params["recov_probability"])
+            output_dict["beta"].append(ssm_params[0])
+            output_dict["gamma"].append(ssm_params[1])
             # jax randomness
             key = new_key
 
         # update abm params in global space
-        # mpi_comm.Barrier()
         abm_params = mpi_comm.bcast(abm_params, root=0)
         old_s = copy.copy(model.susceptible)
         old_i = copy.copy(model.infect)
         old_r = copy.copy(model.recover)
 
     if mpi_rank == 0:
-        out_file = f"results/smc_streaming_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.npz"
+        out_file = f"results/{smc_args['save_name']}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.npz"
         print(f"Writing results to: {out_file}")
         jnp.savez(
             out_file,
@@ -509,11 +472,11 @@ def main(cli_args):
             moments=alg.summaries.moments,
             ess=alg.summaries.ESSs,
             params=smc_args,
-            abm_beta=outout_dict["beta"],
-            abm_gamma=outout_dict["gamma"],
-            abm_S=outout_dict["S"],
-            abm_I=outout_dict["I"],
-            abm_R=outout_dict["R"],
+            abm_beta=output_dict["beta"],
+            abm_gamma=output_dict["gamma"],
+            abm_S=output_dict["S"],
+            abm_I=output_dict["I"],
+            abm_R=output_dict["R"],
         )
 
 

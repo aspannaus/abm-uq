@@ -1,25 +1,25 @@
 # pylint: disable=C0103
 import ctypes as ct
-import functools
 import os
 import random
 
-import jax
 import jax.numpy as jnp
 import jax.random as jr
 
 import numpy as np
 import numpy.ctypeslib as npct
 
+
 if os.uname()[0] == "Linux":
     # setup interface with the scan c-lib
     _float_ptr = npct.ndpointer(dtype=np.float32, ndim=1, flags="C_CONTIGUOUS")
-    _scan = npct.load_library("parallel-scan/libthrustscan.so", os.path.dirname(__file__))
+    _scan = npct.load_library(
+        "parallel-scan/libthrustscan.so", os.path.dirname(__file__)
+    )
     # Define the return type of the C function
     _scan.scan.restype = ct.c_float
     # Define arguments of the C function
     _scan.scan.argtypes = [_float_ptr, _float_ptr, ct.c_int, ct.c_bool]
-
 
 
 def offspring_to_ancestor(O, A, N):
@@ -29,12 +29,11 @@ def offspring_to_ancestor(O, A, N):
         else:
             start = O[i - 1]
         o = (O[i] - start).astype(int)
-        for j in range(1, o+1):
-            A = A.at[start+j].set(i)
+        for j in range(1, o + 1):
+            A = A.at[start + j].set(i)
     return A
 
 
-# @numba.jit(nopython=True)
 def inverse_cdf(su, W, M):
     """Inverse CDF algorithm for a finite distribution.
 
@@ -52,7 +51,6 @@ def inverse_cdf(su, W, M):
     """
     j = 0
     s = W[0]
-    # M = su.shape[0]
     A = np.empty(M, dtype=np.int32)
     for n in range(M):
         while su[n] > s:
@@ -133,7 +131,6 @@ def multinomial_once(W, key):
 
     but it is faster.
     """
-    # return np.searchsorted(np.cumsum(W), random.rand())
     return jnp.searchsorted(jnp.cumsum(W), jr.uniform(key))
 
 
@@ -204,7 +201,6 @@ class Weights:
         self.ESS = 1.0 / jnp.sum(self.W**2)
         return self.ESS
 
-    # @jit
     def add(self, delta):
         """Increment weights: lw <-lw + delta.
 
@@ -216,11 +212,6 @@ class Weights:
         """
         for i in range(self.N):
             self.lw = self.lw.at[i].add(delta[i])
-        # return self.lw
-
-        # if self.lw is None:
-        #     return self.__class__(lw=delta)
-        # return self.__class__(lw=self.lw + delta)
 
 
 class Resampler:
@@ -334,13 +325,8 @@ class Resampler:
 
     def systematic(self, W, key):
         """Systematic resampling."""
-        # if W is None:
-        #     W = self.W
-        # if M is None:
+
         M = self.N
-        # NOTE: do we need to check if W is normalized to 1?
-        # print(W.sum())
-        # su = (0.0796543 + jnp.arange(M)) / M
         su = (jr.uniform(key) + jnp.arange(M)) / M
         A = self.inverse_cdf(su, W)
         return A
@@ -358,71 +344,4 @@ class Resampler:
         # each particle n is repeated intpart[n] times
         if sres > 0:
             A[sip:] = self.multinomial(key, res / sres, M=sres)
-        return A
-
-    @staticmethod
-    # @numba.njit
-    def ssp(W, M):
-        """SSP resampling.
-
-        SSP stands for Srinivasan Sampling Process. This resampling scheme is
-        discussed in Gerber et al (2019). Basically, it has similar properties as
-        systematic resampling (number of off-springs is either k or k + 1, with
-        k <= N W^n < k +1), and in addition is consistent. See that paper for more
-        details.
-
-        Reference
-        =========
-        Gerber M., Chopin N. and Whiteley N. (2019). Negative association, ordering
-        and convergence of resampling methods. Ann. Statist. 47 (2019), no. 4, 2236–2260.
-        """
-        N = W.shape[0]
-        MW = M * W
-        nr_children = np.floor(MW).astype(np.int32)
-        xi = MW - nr_children
-        u = np.random.random_sample(size=N - 1)
-        i, j = 0, 1
-        for k in range(N - 1):
-            delta_i = min(xi[j], 1.0 - xi[i])  # increase i, decr j
-            delta_j = min(xi[i], 1.0 - xi[j])  # the opposite
-            sum_delta = delta_i + delta_j
-            # prob we increase xi[i], decrease xi[j]
-            pj = delta_i / sum_delta if sum_delta > 0.0 else 0.0
-            # sum_delta = 0. => xi[i] = xi[j] = 0.
-            if u[k] < pj:  # swap i, j, so that we always inc i
-                j, i = i, j
-                delta_i = delta_j
-            if xi[j] < 1.0 - xi[i]:
-                xi[i] += delta_i
-                j = k + 2
-            else:
-                xi[j] -= delta_i
-                nr_children[i] += 1
-                i = k + 2
-        # due to round-off error accumulation, we may be missing one particle
-        if np.sum(nr_children) == M - 1:
-            last_ij = i if j == k + 2 else j
-            if xi[last_ij] > 0.99:
-                nr_children[last_ij] += 1
-        if np.sum(nr_children) != M:
-            # file a bug report with the vector of weights that causes this
-            raise ValueError("ssp resampling: wrong size for output")
-        return np.arange(N).repeat(nr_children)
-
-    def killing(self, W, M):
-        """Killing resampling.
-
-        This resampling scheme was not described in the book. For each particle,
-        one either keeps the current value (with probability W[i] / W.max()), or
-        replaces it by a draw from the multinomial distribution.
-
-        This scheme requires to take M=N.
-        """
-        N = W.shape[0]
-        if M != N:
-            raise ValueError("killing resampling defined only for M=N")
-        killed = jr.unifrom(shape=(N,)) * W.max() >= W
-        nkilled = killed.sum()
-        A = jnp.arange(N)
-        A[killed] = self.multinomial(W, nkilled)
         return A

@@ -42,11 +42,9 @@ def main(cli_args):
 
     T_max = mod_args["SMC_args"]["T_max"]
     tau = mod_args["SMC_args"]["tau"]
-    
+
     N = mod_args["epi_args"]["N"]
     I0 = mod_args["epi_args"]["I0"]
-    beta = mod_args["epi_args"]["beta"]
-    gamma = mod_args["epi_args"]["gamma"]
 
     key = jr.key(mod_args["SMC_args"]["seed"])
     model_key, fk_key, alg_key = jr.split(key, 3)
@@ -85,7 +83,7 @@ def main(cli_args):
         moments=alg.summaries.moments,
         lw=alg.hist.wgts,
         ess=alg.summaries.ESSs,
-        params=mod_args
+        params=mod_args,
     )
 
 
