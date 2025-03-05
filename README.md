@@ -6,7 +6,7 @@ working Cuda [toolkit](https://developer.nvidia.com/cuda-toolkit) installation f
 
 You will also need:
   - NVCC
-  - GNU C and C++ compilers
+  - C and C++ compilers (tested with GCC)
 
 ## Compiling shared parallel-scan library
 
@@ -47,3 +47,6 @@ Following is a brief description of the required keywords in the config file.
   - sigma2_x: 0.05  # variance of ensemble noise
   - sigma2_y: 0.1   # variance of observational noise
 
+### Plotting Results
+
+To create the plots, run `$ python plotting.py -d datafile` where `datafile` isis the output file from the ABM/SMC coupling. The ridge plots are created similarly by running `$ python ridge_plot.py -d datafile`.

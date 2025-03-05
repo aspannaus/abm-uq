@@ -68,30 +68,32 @@ def plot(plot_args, abm, data, soln):
     moments = data["moments"]
 
     fig, ax = plt.subplots(nrows=2, ncols=2, dpi=300)
+    
     ax[0, 0].plot(ts, [m["mean"][0] for m in moments], label="S SMC")
-    ax[0, 0].plot(t_epi, S, label="S ODE", color="tab:orange")
     ub = clip([m["mean"][0] + 2 * np.sqrt(m["var"][0]) for m in moments])
     lb = clip([m["mean"][0] - 2 * np.sqrt(m["var"][0]) for m in moments])
     ax[0, 0].fill_between(ts, lb, ub, alpha=0.2, color="tab:blue")
+    
+    ax[0, 0].plot(t_epi, S, label="S ODE", color="tab:orange")
     ax[0, 0].set_ylabel("Population Proportion")
-    # ax[0, 0].set_xlabel("t")
     ax[0, 0].legend()
 
     ax[0, 1].plot(ts, [m["mean"][1] for m in moments], label="I SMC")
-    ax[0, 1].scatter(np.arange(abm.shape[0]), abm, marker="x", color="m")
-    ax[0, 1].plot(t_epi, I, label="I ODE", color="tab:orange")
     ub = clip([m["mean"][1] + 2 * np.sqrt(m["var"][1]) for m in moments])
     lb = clip([m["mean"][1] - 2 * np.sqrt(m["var"][1]) for m in moments])
     ax[0, 1].fill_between(ts, lb, ub, alpha=0.2, color="tab:blue")
-    # ax[0, 1].set_xlabel("t")
+    
+    ax[0, 1].scatter(np.arange(abm.shape[0]), abm, marker="x", color="m", label="ABM")
+    ax[0, 1].plot(t_epi, I, label="I ODE", color="tab:orange")
     ax[0, 1].set_ylabel("Population Proportion")
     ax[0, 1].legend()
 
     ax[1, 0].plot(ts, [m["mean"][2] for m in moments], label="R SMC")
-    ax[1, 0].plot(t_epi, R, label="R ODE", color="tab:orange")
     ub = clip([m["mean"][2] + 2 * np.sqrt(m["var"][2]) for i, m in enumerate(moments)])
     lb = clip([m["mean"][2] - 2 * np.sqrt(m["var"][2]) for i, m in enumerate(moments)])
     ax[1, 0].fill_between(ts, lb, ub, alpha=0.2, color="tab:blue")
+    
+    ax[1, 0].plot(t_epi, R, label="R ODE", color="tab:orange")
     ax[1, 0].set_xlabel("Time (days)")
     ax[1, 0].set_ylabel("Population Proportion")
     ax[1, 0].legend()
@@ -148,19 +150,9 @@ def main(cli_args):
     print("Reading config file from command-line ")
 
     if os.path.isfile(cli_args.data):
-        if cli_args.model == "static":
-            data = np.load(cli_args.data, allow_pickle=True)
-            # fancy indexing to get the dict of model params
-            mod_args = data["params"][()]
-            in_file = mod_args["SMC_args"]["abm_file"]
-            _abm_data = load_abm_data(in_file)
-            abm_data = _abm_data[:, 1]
-        elif cli_args.model == "streaming":
-            data = np.load(cli_args.data, allow_pickle=True)
-            mod_args = data["params"][()]
-            abm_data = data["abm_I"].flatten()
-        else:
-            raise ParamError("""The data file is required to plot the results.""")
+        data = np.load(cli_args.data, allow_pickle=True)
+        mod_args = data["params"][()]
+        abm_data = data["abm_I"].flatten()
     else:
         raise ParamError("""The data file is required to plot the results.""")
 
@@ -199,15 +191,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-
-    parser.add_argument(
-        "--model",
-        "-m",
-        type=str,
-        default="",
-        help="""specify the model type, either streaming or static""",
-        required=True,
     )
 
     parser.add_argument(

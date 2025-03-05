@@ -83,6 +83,7 @@ def main(cli_args):
         moments=alg.summaries.moments,
         lw=alg.hist.wgts,
         ess=alg.summaries.ESSs,
+        abm_I=sir.y[:,1],
         params=mod_args,
     )
 
