@@ -211,8 +211,6 @@ class Weights:
 
         """
         self.lw = self.lw.at[:].add(delta)
-        # for i in range(self.N):
-        #     self.lw = self.lw.at[i].add(delta[i])
 
 
 class Resampler:
