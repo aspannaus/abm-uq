@@ -20,40 +20,11 @@ class StateSpaceModel:
     """Base class for state-space models.
 
     To define a state-space model class, you must sub-class `StateSpaceModel`,
-    and at least define methods PX0, PX, and PY. Here is an example::
-
-        class LinearGauss(StateSpaceModel):
-            def PX0(self):  # The law of X_0
-                return dists.Normal(scale=self.sigmaX)
-            def PX(self, t, xp):  # The law of X_t conditional on X_{t-1}
-                return dists.Normal(loc=self.rho * xp, scale=self.sigmaY)
-            def PY(self, t, xp, x):  # the law of Y_t given X_t and X_{t-1}
-                return dists.Normal(loc=x, scale=self.sigmaY)
-
-    These methods return ``ProbDist`` objects, which are defined in the module
-    `distributions`. The model above is a basic linear Gaussian SSM; it
-    depends on parameters rho, sigmaX, sigmaY (which are attributes of the
-    class). To define a particular instance of this class, we do::
-
-        a_certain_ssm = LinearGauss(rho=.8, sigmaX=1., sigmaY=.2)
-
-    All the attributes that appear in ``PX0``, ``PX`` and ``PY`` must be
-    initialised in this way. Alternatively, it it possible to define default
-    values for these parameters, by defining class attribute
-    ``default_params`` to be a dictionary as follows::
-
-        class LinearGauss(StateSpaceModel):
-            default_params = {'rho': .9, 'sigmaX': 1., 'sigmaY': .1}
-            # rest as above
-
-    Optionally, we may also define methods:
+    and at least define methods PX0, PX, and PY. 
 
     * `proposal0(self, data)`: the (data-dependent) proposal dist at time 0
     * `proposal(self, t, xp, data)`: the (data-dependent) proposal distribution at
       time t, for X_t, conditional on X_{t-1}=xp
-    * `logeta(self, t, x, data)`: the auxiliary weight function at time t
-
-    You need these extra methods to run a guided or auxiliary particle filter.
 
     """
 
