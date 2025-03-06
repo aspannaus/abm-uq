@@ -257,8 +257,8 @@ class SIRSDE(StateSpaceModel):
             Y0 = self.PX0()
         Y0 = Y0 + (0.1 * self.sigma2_y * jr.normal(key, shape=(size, 5)))
 
-        Y0 = Y0.at[:3].set(jnp.where(Y0[:3] > 0, Y0[:3], jnp.abs(Y0[:3])))
-        Y0 = Y0.at[:3].set(jnp.where(Y0[:3] < 1.0, Y0[:3], 1.0 / Y0[:3]))
+        Y0 = Y0.at[:, :3].set(jnp.where(Y0[:, :3] > 0, Y0[:, :3], jnp.abs(Y0[:, :3])))
+        Y0 = Y0.at[:, :3].set(jnp.where(Y0[:, :3] < 1.0, Y0[:, :3], 1.0 / Y0[:, :3]))
 
         return Y0
 
