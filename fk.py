@@ -288,7 +288,8 @@ class SMC:
         gauss_process = gp.GaussianProcessRegressor(kernel=kernel, alpha=1e-2)
 
         gauss_process.fit(self.hist.X[-1], ys)
-        self.X = jnp.array(gauss_process.predict(self.X_hat, return_cov=False))
+        mu = gauss_process.predict(self.X_hat, return_cov=False)
+        self.X = mu + 0.001 * jr.normal(mvn_key, shape=self.hist.X[-1].shape)
 
         tmp = jnp.where(self.X[:, :3] < 1, self.X[:, :3], 1.0 / self.X[:, :3])
         self.X = self.X.at[:, :3].set(tmp)
