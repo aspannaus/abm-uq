@@ -250,7 +250,8 @@ class SIRSDE(StateSpaceModel):
             _res[:, 1], y[1], var
         )
         return res.T
-
+    
+    @jax.jit
     def PX(self, t, xp, key, add_noise=True):
         """Compute single sample of the push-forward."""
         sir_key, noise_key = jr.split(key, 2)
@@ -262,7 +263,7 @@ class SIRSDE(StateSpaceModel):
 
         return res + noise
 
-
+    @jax.jit
     def PX_rvs(self, t, xp, key, add_noise=True):
         """Compute an n_particle sample from the push-forward."""
         keys = jr.split(key, xp.shape[0])

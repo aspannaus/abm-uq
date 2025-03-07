@@ -29,8 +29,10 @@ def offspring_to_ancestor(O, A, N):
         else:
             start = O[i - 1]
         o = (O[i] - start).astype(int)
-        for j in range(1, o + 1):
-            A = A.at[start + j].set(i)
+        # o = jnp.diff(O).astype(int)
+        A = A.at[start+1:start+o+1].set(i)
+        # for j in range(1, o + 1):
+        #     A = A.at[start + j].set(i)
     return A
 
 
@@ -56,8 +58,7 @@ def inverse_cdf(su, W, M):
         while su[n] > s:
             j += 1
             s += W[j]
-        A[n] = j
-        print(s)
+        A = A.at[n].set(j)
     return A
 
 
@@ -305,6 +306,7 @@ class Resampler:
         """Systematic resampling method with parallel-prefix sum.
 
         See Kitagawa, 1996: https://doi-org.utk.idm.oclc.org/10.2307/1390750
+        https://www.jstor.org/stable/1390750?seq=23
         deterministic alg in appendix a-D
         """
 
@@ -314,7 +316,8 @@ class Resampler:
         _ = _scan.scan(
             wts_out, np.asarray(W, dtype=np.float32), ct.c_int(N), ct.c_bool(True)
         )
-        R = jnp.floor(jr.uniform(key) + (N * wts_out / wts_out[-1]))
+        # R = jnp.floor(jr.uniform(key) + (N * wts_out / wts_out[-1]))
+        R = (jnp.arange(N) - jr.uniform(key)) / N
         # cumulative offspring
         O = jnp.where(N > R, R, N).astype(jnp.int32)
         A = jnp.zeros(shape=N, dtype=jnp.int32)
