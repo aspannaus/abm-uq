@@ -316,8 +316,7 @@ class Resampler:
         _ = _scan.scan(
             wts_out, np.asarray(W, dtype=np.float32), ct.c_int(N), ct.c_bool(True)
         )
-        # R = jnp.floor(jr.uniform(key) + (N * wts_out / wts_out[-1]))
-        R = (jnp.arange(N) - jr.uniform(key)) / N
+        R = jnp.floor(jr.uniform(key) + (N * wts_out / wts_out[-1]))
         # cumulative offspring
         O = jnp.where(N > R, R, N).astype(jnp.int32)
         A = jnp.zeros(shape=N, dtype=jnp.int32)
